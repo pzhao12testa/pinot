@@ -139,7 +139,7 @@
         options=patternsOfInterest
         searchEnabled=false
         selected=selectedPattern
-        onchange=(action "onSelectPattern")
+        onchange=(action (mut selectedPattern))
         disabled=(not isMetricSelected)
         required=true
         as |name|
@@ -246,7 +246,8 @@
         class="form-control te-input"
         placeholder="Add a descriptive alert name"
         value=alertFunctionName
-        key-up=(action "validateAlertName" alertFunctionName true)
+        focus-out="validateAlertName"
+        key-up="validateAlertName"
         disabled=(not isMetricSelected)
       }}
     </div>
@@ -363,6 +364,41 @@
     </div>
   </fieldset>
 
+  {{#if isCreateAlertSuccess}}
+    {{#bs-alert type="success" class="te-form__banner te-form__banner--success"}}
+      <strong>Create Alert Success!</strong> You have created anomaly alert Id <strong>{{finalFunctionId}}</strong>
+      {{#if selectedConfigGroup}}
+        ... and assigned it to existing notification group <strong>{{selectedConfigGroup.name}}</strong>.
+      {{/if}}
+    {{/bs-alert}}
+  {{/if}}
+
+  {{#if isCreateAlertError}}
+    {{#bs-alert type="danger" class="te-form__banner te-form__banner--failure"}}
+      <strong>Create Alert Error!</strong> Alert creation has failed. Please try again.
+    {{/bs-alert}}
+  {{/if}}
+
+  {{#if isCreateGroupSuccess}}
+    {{#bs-alert type="success" class="te-form__banner te-form__banner--success"}}
+      <strong>New Group Success!</strong> You have created anomaly notification group <strong>{{newConfigGroupName}}</strong>.
+    {{/bs-alert}}
+  {{/if}}
+
+  {{#if isReplayStarted}}
+    {{#bs-alert type=bsAlertBannerType class="te-form__banner" classNameBindings="replayStatusClass"}}
+      {{#if isReplayStatusPending}}
+        ...triggering replay. Please wait.
+      {{/if}}
+      {{#if isReplayStatusSuccess}}
+        <strong>Replay Success!</strong> The replay of anomaly alert <strong>{{alertFunctionName}}</strong> has started processing.
+      {{/if}}
+      {{#if isReplayStatusError}}
+        <strong>Replay Warning:</strong> {{failureMessage}}
+      {{/if}}
+    {{/bs-alert}}
+  {{/if}}
+
   <fieldset class="te-form__section-submit">
     {{bs-button
       defaultText="Clear All"
@@ -389,6 +425,8 @@
         class="te-button te-button--submit"
       }}
     {{/if}}
+
   </fieldset>
+
   {{outlet}}
 </main>

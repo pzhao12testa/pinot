@@ -8,7 +8,6 @@ import com.linkedin.pinot.pql.parsers.utils.Pair;
 import com.linkedin.thirdeye.anomaly.alert.util.AlertFilterHelper;
 import com.linkedin.thirdeye.anomaly.detection.AnomalyDetectionInputContext;
 import com.linkedin.thirdeye.anomaly.detection.AnomalyDetectionInputContextBuilder;
-import com.linkedin.thirdeye.anomaly.onboard.utils.FunctionCreationUtils;
 import com.linkedin.thirdeye.anomaly.views.AnomalyTimelinesView;
 import com.linkedin.thirdeye.anomalydetection.context.AnomalyFeedback;
 import com.linkedin.thirdeye.anomalydetection.context.TimeSeries;
@@ -17,7 +16,6 @@ import com.linkedin.thirdeye.api.MetricTimeSeries;
 import com.linkedin.thirdeye.api.TimeGranularity;
 import com.linkedin.thirdeye.api.TimeSpec;
 import com.linkedin.thirdeye.constant.AnomalyFeedbackType;
-import com.linkedin.thirdeye.constant.AnomalyResultSource;
 import com.linkedin.thirdeye.constant.MetricAggFunction;
 import com.linkedin.thirdeye.dashboard.Utils;
 import com.linkedin.thirdeye.dashboard.resources.v2.AnomaliesResource;
@@ -40,10 +38,7 @@ import com.linkedin.thirdeye.datalayer.dto.RawAnomalyResultDTO;
 import com.linkedin.thirdeye.datalayer.pojo.MetricConfigBean;
 import com.linkedin.thirdeye.datasource.DAORegistry;
 import com.linkedin.thirdeye.datasource.ThirdEyeCacheRegistry;
-import com.linkedin.thirdeye.detector.email.filter.AlertFilter;
 import com.linkedin.thirdeye.detector.email.filter.AlertFilterFactory;
-import com.linkedin.thirdeye.detector.email.filter.BaseAlertFilter;
-import com.linkedin.thirdeye.detector.email.filter.DummyAlertFilter;
 import com.linkedin.thirdeye.detector.function.AnomalyFunctionFactory;
 import com.linkedin.thirdeye.detector.function.BaseAnomalyFunction;
 import com.linkedin.thirdeye.detector.metric.transfer.MetricTransfer;
@@ -220,19 +215,6 @@ public class AnomalyResource {
     return anomalyResults;
   }
 
-  // Get anomaly score
-  @GET
-  @Path("/anomalies/score/{anomaly_merged_result_id}")
-  public double getAnomalyScore(@NotNull @PathParam("anomaly_merged_result_id") long mergedAnomalyId) {
-    MergedAnomalyResultDTO mergedAnomaly = anomalyMergedResultDAO.findById(mergedAnomalyId);
-    BaseAlertFilter alertFilter = new DummyAlertFilter();
-    if (mergedAnomaly != null) {
-      AnomalyFunctionDTO anomalyFunctionSpec = anomalyFunctionDAO.findById(mergedAnomaly.getFunctionId());
-      alertFilter = alertFilterFactory.fromSpec(anomalyFunctionSpec.getAlertFilter());
-    }
-    return alertFilter.getProbability(mergedAnomaly);
-  }
-
   //View raw anomalies for collection
   @GET
   @Path("/raw-anomalies/view")
@@ -340,11 +322,8 @@ public class AnomalyResource {
     }
 
     TimeGranularity dataGranularity;
-    DatasetConfigDTO datasetConfig = DAO_REGISTRY.getDatasetConfigDAO().findByDataset(dataset);
-    if (datasetConfig == null) {
-      throw new IllegalArgumentException(String.format("No entry with dataset name %s exists", dataset));
-    }
     if (userInputDataGranularity == null) {
+      DatasetConfigDTO datasetConfig = DAO_REGISTRY.getDatasetConfigDAO().findByDataset(dataset);
       TimeSpec timespec = ThirdEyeUtils.getTimeSpecFromDatasetConfig(datasetConfig);
       dataGranularity = timespec.getDataGranularity();
     } else {
@@ -402,7 +381,7 @@ public class AnomalyResource {
     anomalyFunctionSpec.setBucketUnit(dataGranularity.getUnit());
 
     if (StringUtils.isNotEmpty(exploreDimensions)) {
-      anomalyFunctionSpec.setExploreDimensions(FunctionCreationUtils.getDimensions(datasetConfig, exploreDimensions));
+      anomalyFunctionSpec.setExploreDimensions(getDimensions(dataset, exploreDimensions));
     }
     if (!StringUtils.isBlank(filters)) {
       filters = URLDecoder.decode(filters, UTF8);
@@ -542,8 +521,7 @@ public class AnomalyResource {
 
     if (StringUtils.isNotEmpty(exploreDimensions)) {
       // Ensure that the explore dimension names are ordered as schema dimension names
-      DatasetConfigDTO datasetConfig = datasetConfigDAO.findByDataset(anomalyFunctionSpec.getCollection());
-      anomalyFunctionSpec.setExploreDimensions(FunctionCreationUtils.getDimensions(datasetConfig, exploreDimensions));
+      anomalyFunctionSpec.setExploreDimensions(getDimensions(dataset, exploreDimensions));
     }
     if (StringUtils.isNotEmpty(cron)) {
       // validate cron
@@ -944,6 +922,21 @@ public class AnomalyResource {
     return false;
   }
 
+  private String getDimensions(String dataset, String exploreDimensions) throws Exception {
+    // Ensure that the explore dimension names are ordered as schema dimension names
+    List<String> schemaDimensionNames = CACHE_REGISTRY_INSTANCE.getDatasetConfigCache().get(dataset).getDimensions();
+    Set<String> splitExploreDimensions = new HashSet<>(Arrays.asList(exploreDimensions.trim().split(",")));
+    StringBuilder reorderedExploreDimensions = new StringBuilder();
+    String separator = "";
+    for (String dimensionName : schemaDimensionNames) {
+      if (splitExploreDimensions.contains(dimensionName)) {
+        reorderedExploreDimensions.append(separator).append(dimensionName);
+        separator = ",";
+      }
+    }
+    return reorderedExploreDimensions.toString();
+  }
+
   /**
    * Show the content of merged anomalies whose start time is located in the given time ranges
    *
@@ -1002,8 +995,7 @@ public class AnomalyResource {
 
       for (MergedAnomalyResultDTO mergedAnomaly : mergedResults) {
         // if use notified flag, only keep anomalies isNotified == true
-        if ( (useNotified && mergedAnomaly.isNotified()) || !useNotified
-            || AnomalyResultSource.USER_LABELED_ANOMALY.equals(mergedAnomaly.getAnomalyResultSource())) {
+        if ( (useNotified && mergedAnomaly.isNotified()) || !useNotified) {
           anomalyIdList.add(mergedAnomaly.getId());
         }
       }

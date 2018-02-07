@@ -11,7 +11,6 @@ import com.linkedin.thirdeye.datalayer.bao.DAOTestBase;
 import com.linkedin.thirdeye.datalayer.bao.DatasetConfigManager;
 import com.linkedin.thirdeye.datalayer.bao.JobManager;
 import com.linkedin.thirdeye.datalayer.bao.MetricConfigManager;
-import com.linkedin.thirdeye.datalayer.dto.AnomalyFunctionDTO;
 import com.linkedin.thirdeye.datalayer.dto.DatasetConfigDTO;
 import com.linkedin.thirdeye.datalayer.dto.MetricConfigDTO;
 import com.linkedin.thirdeye.datasource.DAORegistry;
@@ -77,12 +76,6 @@ public class TestOnboardingTasks {
 
   @Test
   public void testOnboardingTasks() throws Exception{
-    AnomalyFunctionDTO dummyFunction = new AnomalyFunctionDTO();
-    dummyFunction.setFunctionName(context.getConfiguration().getString(DefaultDetectionOnboardJob.FUNCTION_NAME));
-    dummyFunction.setMetricId(-1);
-    dummyFunction.setIsActive(false);
-    anomalyFunctionDAO.save(dummyFunction);
-
     DetectionOnboardTask task = new DataPreparationOnboardingTask();
     task.setTaskContext(context);
     task.run();

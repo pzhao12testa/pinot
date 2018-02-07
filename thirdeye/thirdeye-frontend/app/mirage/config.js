@@ -4,11 +4,6 @@ import entityApplication from 'thirdeye-frontend/mocks/entityApplication';
 import metric from 'thirdeye-frontend/mocks/metric';
 import timeseriesCompare from 'thirdeye-frontend/mocks/timeseriesCompare';
 import { onboardJobStatus, onboardJobCreate } from 'thirdeye-frontend/mocks/detectionOnboard';
-import rootcause from 'thirdeye-frontend/mirage/endpoints/rootcause';
-
-/**
- * TODO: Group endpoints together and put them in files under the endpoints folder to prevent overloading this file
- */
 
 export default function() {
 
@@ -199,17 +194,15 @@ export default function() {
   /**
    * Get request to retrieve an anomaly reports
    */
-  this.get(`/session/:id`, () => {
+  this.get(`/session/:id`, (schema, request) => {
     return {};
   });
 
   /**
    * Post request for saving anomaly reports
    */
-  this.post(`/session`, () => {
+  this.post(`/session`, (schema, request) => {
     const hardCodedId = 1234567;
     return hardCodedId;
   });
-
-  rootcause(this);
 }

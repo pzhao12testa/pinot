@@ -18,10 +18,12 @@ package com.linkedin.pinot.core.segment.index;
 import com.google.common.base.Preconditions;
 import com.linkedin.pinot.common.data.MetricFieldSpec;
 import com.linkedin.pinot.common.data.Schema;
+import com.linkedin.pinot.common.metadata.segment.OfflineSegmentZKMetadata;
 import com.linkedin.pinot.common.metadata.segment.RealtimeSegmentZKMetadata;
 import com.linkedin.pinot.common.segment.SegmentMetadata;
 import com.linkedin.pinot.common.segment.StarTreeMetadata;
 import com.linkedin.pinot.common.utils.time.TimeUtils;
+import com.linkedin.pinot.core.indexsegment.IndexType;
 import com.linkedin.pinot.core.indexsegment.generator.SegmentVersion;
 import com.linkedin.pinot.core.segment.creator.impl.V1Constants;
 import com.linkedin.pinot.core.segment.store.SegmentDirectoryPaths;
@@ -65,6 +67,7 @@ public class SegmentMetadataImpl implements SegmentMetadata {
   private static final Logger LOGGER = LoggerFactory.getLogger(SegmentMetadataImpl.class);
 
   private final PropertiesConfiguration _segmentMetadataPropertiesConfiguration;
+  private final File _metadataFile;
   private final Map<String, ColumnMetadata> _columnMetadataMap;
   private String _segmentName;
   private final Set<String> _allColumns;
@@ -96,10 +99,10 @@ public class SegmentMetadataImpl implements SegmentMetadata {
    * <p>If segment metadata file exists in multiple segment version, load the one in highest segment version.
    */
   public SegmentMetadataImpl(File indexDir) throws ConfigurationException, IOException {
-    File metadataFile = SegmentDirectoryPaths.findMetadataFile(indexDir);
-    Preconditions.checkNotNull(metadataFile, "Cannot find segment metadata file under directory: %s", indexDir);
+    _metadataFile = SegmentDirectoryPaths.findMetadataFile(indexDir);
+    Preconditions.checkNotNull(_metadataFile, "Cannot find segment metadata file under directory: %s", indexDir);
 
-    _segmentMetadataPropertiesConfiguration = new PropertiesConfiguration(metadataFile);
+    _segmentMetadataPropertiesConfiguration = new PropertiesConfiguration(_metadataFile);
     _columnMetadataMap = new HashMap<>();
     _allColumns = new HashSet<>();
     _schema = new Schema();
@@ -118,11 +121,58 @@ public class SegmentMetadataImpl implements SegmentMetadata {
             _totalDocs);
   }
 
-  public SegmentMetadataImpl(RealtimeSegmentZKMetadata segmentMetadata, Schema schema) {
+  public SegmentMetadataImpl(OfflineSegmentZKMetadata offlineSegmentZKMetadata) {
     _segmentMetadataPropertiesConfiguration = new PropertiesConfiguration();
+
     _segmentMetadataPropertiesConfiguration.addProperty(Segment.SEGMENT_CREATOR_VERSION, null);
+
     _segmentMetadataPropertiesConfiguration.addProperty(Segment.SEGMENT_PADDING_CHARACTER,
         V1Constants.Str.DEFAULT_STRING_PAD_CHAR);
+
+    _segmentMetadataPropertiesConfiguration.addProperty(V1Constants.MetadataKeys.Segment.SEGMENT_START_TIME,
+        Long.toString(offlineSegmentZKMetadata.getStartTime()));
+    _segmentMetadataPropertiesConfiguration.addProperty(V1Constants.MetadataKeys.Segment.SEGMENT_END_TIME,
+        Long.toString(offlineSegmentZKMetadata.getEndTime()));
+    _segmentMetadataPropertiesConfiguration.addProperty(V1Constants.MetadataKeys.Segment.TABLE_NAME,
+        offlineSegmentZKMetadata.getTableName());
+
+    final TimeUnit timeUnit = offlineSegmentZKMetadata.getTimeUnit();
+    if (timeUnit != null) {
+      _segmentMetadataPropertiesConfiguration.addProperty(V1Constants.MetadataKeys.Segment.TIME_UNIT,
+          timeUnit.toString());
+    } else {
+      _segmentMetadataPropertiesConfiguration.addProperty(V1Constants.MetadataKeys.Segment.TIME_UNIT, null);
+    }
+
+    _segmentMetadataPropertiesConfiguration.addProperty(Segment.SEGMENT_TOTAL_DOCS,
+        offlineSegmentZKMetadata.getTotalRawDocs());
+
+    _crc = offlineSegmentZKMetadata.getCrc();
+    _creationTime = offlineSegmentZKMetadata.getCreationTime();
+    _pushTime = offlineSegmentZKMetadata.getPushTime();
+    _refreshTime = offlineSegmentZKMetadata.getRefreshTime();
+    setTimeInfo();
+    _columnMetadataMap = null;
+    _segmentName = offlineSegmentZKMetadata.getSegmentName();
+    _schema = new Schema();
+    _allColumns = new HashSet<>();
+    _indexDir = null;
+    _metadataFile = null;
+    _totalDocs = _segmentMetadataPropertiesConfiguration.getInt(V1Constants.MetadataKeys.Segment.SEGMENT_TOTAL_DOCS);
+    _totalRawDocs =
+        _segmentMetadataPropertiesConfiguration.getInt(V1Constants.MetadataKeys.Segment.SEGMENT_TOTAL_RAW_DOCS,
+            _totalDocs);
+  }
+
+  public SegmentMetadataImpl(RealtimeSegmentZKMetadata segmentMetadata) {
+
+    _segmentMetadataPropertiesConfiguration = new PropertiesConfiguration();
+
+    _segmentMetadataPropertiesConfiguration.addProperty(Segment.SEGMENT_CREATOR_VERSION, null);
+
+    _segmentMetadataPropertiesConfiguration.addProperty(Segment.SEGMENT_PADDING_CHARACTER,
+        V1Constants.Str.DEFAULT_STRING_PAD_CHAR);
+
     _segmentMetadataPropertiesConfiguration.addProperty(V1Constants.MetadataKeys.Segment.SEGMENT_START_TIME,
         Long.toString(segmentMetadata.getStartTime()));
     _segmentMetadataPropertiesConfiguration.addProperty(V1Constants.MetadataKeys.Segment.SEGMENT_END_TIME,
@@ -130,7 +180,7 @@ public class SegmentMetadataImpl implements SegmentMetadata {
     _segmentMetadataPropertiesConfiguration.addProperty(V1Constants.MetadataKeys.Segment.TABLE_NAME,
         segmentMetadata.getTableName());
 
-    TimeUnit timeUnit = segmentMetadata.getTimeUnit();
+    final TimeUnit timeUnit = segmentMetadata.getTimeUnit();
     if (timeUnit != null) {
       _segmentMetadataPropertiesConfiguration.addProperty(V1Constants.MetadataKeys.Segment.TIME_UNIT,
           timeUnit.toString());
@@ -145,17 +195,29 @@ public class SegmentMetadataImpl implements SegmentMetadata {
     setTimeInfo();
     _columnMetadataMap = null;
     _segmentName = segmentMetadata.getSegmentName();
-    _allColumns = schema.getColumnNames();
-    _schema = schema;
+    _schema = new Schema();
+    _allColumns = new HashSet<String>();
     _indexDir = null;
+    _metadataFile = null;
     _totalDocs = _segmentMetadataPropertiesConfiguration.getInt(V1Constants.MetadataKeys.Segment.SEGMENT_TOTAL_DOCS);
     _totalRawDocs =
         _segmentMetadataPropertiesConfiguration.getInt(V1Constants.MetadataKeys.Segment.SEGMENT_TOTAL_RAW_DOCS,
             _totalDocs);
   }
 
+  public SegmentMetadataImpl(RealtimeSegmentZKMetadata segmentMetadata, Schema schema) {
+    this(segmentMetadata);
+    setSchema(schema);
+  }
+
   public PropertiesConfiguration getSegmentMetadataPropertiesConfiguration() {
     return _segmentMetadataPropertiesConfiguration;
+  }
+
+  private void setSchema(Schema schema) {
+    for (String columnName : schema.getColumnNames()) {
+      _schema.addField(schema.getFieldSpecFor(columnName));
+    }
   }
 
   /**
@@ -355,6 +417,11 @@ public class SegmentMetadataImpl implements SegmentMetadata {
   }
 
   @Override
+  public String getIndexType() {
+    return IndexType.COLUMNAR.toString();
+  }
+
+  @Override
   public String getTimeColumn() {
     return _timeColumn;
   }
@@ -426,6 +493,25 @@ public class SegmentMetadataImpl implements SegmentMetadata {
   @Override
   public String getName() {
     return _segmentName;
+  }
+
+  @Override
+  public Map<String, String> toMap() {
+    final Map<String, String> ret = new HashMap<String, String>();
+    ret.put(V1Constants.MetadataKeys.Segment.TABLE_NAME, getTableName());
+    ret.put(V1Constants.MetadataKeys.Segment.SEGMENT_TOTAL_DOCS, String.valueOf(getTotalDocs()));
+    ret.put(V1Constants.MetadataKeys.Segment.SEGMENT_VERSION, getVersion());
+    ret.put(V1Constants.MetadataKeys.Segment.SEGMENT_NAME, getName());
+    ret.put(V1Constants.MetadataKeys.Segment.SEGMENT_CRC, getCrc());
+    ret.put(V1Constants.MetadataKeys.Segment.SEGMENT_CREATION_TIME, getIndexCreationTime() + "");
+    ret.put(V1Constants.MetadataKeys.Segment.SEGMENT_START_TIME,
+        _segmentMetadataPropertiesConfiguration.getString(V1Constants.MetadataKeys.Segment.SEGMENT_START_TIME));
+    ret.put(V1Constants.MetadataKeys.Segment.SEGMENT_END_TIME,
+        _segmentMetadataPropertiesConfiguration.getString(V1Constants.MetadataKeys.Segment.SEGMENT_END_TIME));
+    ret.put(V1Constants.MetadataKeys.Segment.TIME_UNIT,
+        _segmentMetadataPropertiesConfiguration.getString(V1Constants.MetadataKeys.Segment.TIME_UNIT));
+
+    return ret;
   }
 
   @Override

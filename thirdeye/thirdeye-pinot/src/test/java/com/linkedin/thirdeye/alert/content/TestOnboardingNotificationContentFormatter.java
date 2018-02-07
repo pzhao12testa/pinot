@@ -94,13 +94,10 @@ public class TestOnboardingNotificationContentFormatter {
     AlertConfigDTO alertConfigDTO = DaoTestUtils.getTestAlertConfiguration("Test Config");
     alertConfigDAO.save(alertConfigDTO);
 
-    EmailContentFormatterContext context = new EmailContentFormatterContext();
-    context.setAnomalyFunctionSpec(anomalyFunction);
-    context.setAlertConfig(alertConfigDTO);
     EmailContentFormatter contentFormatter = new OnboardingNotificationEmailContentFormatter();
     contentFormatter.init(new Properties(), EmailContentFormatterConfiguration.fromThirdEyeAnomalyConfiguration(thirdeyeAnomalyConfig));
     EmailEntity emailEntity = contentFormatter.getEmailEntity(alertConfigDTO, "a@b.com", TEST,
-        null, "", anomalies, context);
+        null, "", anomalies, new EmailContentFormatterContext());
 
     String htmlPath = ClassLoader.getSystemResource("test-onboard-notification-email-content-formatter.html").getPath();
     BufferedReader br = new BufferedReader(new FileReader(htmlPath));

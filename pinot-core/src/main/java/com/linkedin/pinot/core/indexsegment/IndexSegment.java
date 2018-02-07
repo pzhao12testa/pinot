@@ -18,56 +18,59 @@ package com.linkedin.pinot.core.indexsegment;
 import com.linkedin.pinot.common.segment.SegmentMetadata;
 import com.linkedin.pinot.core.common.DataSource;
 import com.linkedin.pinot.core.startree.StarTree;
-import java.util.Set;
 
 
+/**
+ * This is the interface of index segment. The index type of index segment
+ * should be one of the supported {@link com.linkedin.pinot.core.indexsegment.IndexType
+ * IndexType}.
+ *
+ *
+ */
 public interface IndexSegment {
-
   /**
-   * Returns the name of the segment.
-   *
-   * @return Segment name
+   * @return
    */
-  String getSegmentName();
+  public IndexType getIndexType();
 
   /**
-   * Returns the {@link SegmentMetadata} of the segment.
-   *
-   * @return Segment metadata
+   * @return
    */
-  SegmentMetadata getSegmentMetadata();
+  public String getSegmentName();
 
   /**
-   * Returns all the columns inside the segment.
-   *
-   * @return Set of column names
+   * @return
    */
-  Set<String> getColumnNames();
+  public String getAssociatedDirectory();
 
   /**
-   * Returns the {@link DataSource} for the given column.
+   * @return SegmentMetadata
+   */
+  public SegmentMetadata getSegmentMetadata();
+
+  /**
    *
-   * @param columnName Column name
-   * @return Data source for the given column
+   * @param columnName
+   * @return
    */
   DataSource getDataSource(String columnName);
 
   /**
-   * Returns the {@link StarTree} index if it exists, or null if it does not exist.
-   *
-   * @return Star-tree index
+   * @return
    */
+  String[] getColumnNames();
+
+  /**
+   * Destroy segment in memory and close file handler if in memory mapped mode
+   */
+  public void destroy();
+
+  /** Returns the StarTree index structure, or null if it does not exist */
   StarTree getStarTree();
 
   /**
-   * Returns the total size of the segment in bytes.
-   *
-   * @return Size of the segment in bytes
+   * Get the total size of the segment in bytes
    */
-  long getDiskSizeBytes();
 
-  /**
-   * Destroys segment in memory and closes file handlers if in MMAP mode.
-   */
-  void destroy();
+  long getDiskSizeBytes();
 }

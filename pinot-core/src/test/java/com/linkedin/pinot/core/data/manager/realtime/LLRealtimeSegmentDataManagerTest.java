@@ -47,7 +47,8 @@ import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
 
 import static org.mockito.Matchers.any;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 
 // TODO Write more tests for other parts of the class
@@ -548,7 +549,7 @@ public class LLRealtimeSegmentDataManagerTest {
   // Replace the realtime segment with a mock that returns numDocs for raw doc count.
   private void replaceRealtimeSegment(FakeLLRealtimeSegmentDataManager segmentDataManager, int numDocs) throws Exception {
     RealtimeSegmentImpl mockSegmentImpl = mock(RealtimeSegmentImpl.class);
-    when(mockSegmentImpl.getNumDocsIndexed()).thenReturn(numDocs);
+    when(mockSegmentImpl.getRawDocumentCount()).thenReturn(numDocs);
     Field segmentImpl = LLRealtimeSegmentDataManager.class.getDeclaredField("_realtimeSegment");
     segmentImpl.setAccessible(true);
     segmentImpl.set(segmentDataManager, mockSegmentImpl);

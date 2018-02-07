@@ -9,7 +9,7 @@
             {{range.name}}
             {{#if (eq range.name "Custom")}}
               : {{date-range-picker
-                  class="te-pill-selectors__range-picker te-pill-selectors__range-picker--explore"
+                  class="te-pill-selectors__range-picker"
                   timePicker=false
                   timePicker24Hour=true
                   timePickerIncrement=timePickerIncrement
@@ -63,42 +63,40 @@
       <h4>Anomalies over time ({{filteredAnomalies.length}})</h4>
       <a class="te-pill-selectors__side-link te-pill-selectors__side-link--high" {{action "onClickReportAnomaly" this}}>Report missing anomaly</a>
 
-      {{#if filteredAnomalies}}
-        <div class="te-pill-selectors">
-          {{!-- Dimension selector --}}
-          <div class="te-form__select te-form__select--wider col-md-3">
-            {{#power-select
-              triggerId="select-dimension"
-              triggerClass="te-form__select"
-              options=dimensionOptions
-              searchEnabled=false
-              matchTriggerWidth=true
-              matchContentWidth=true
-              selected=selectedDimension
-              onchange=(action "onSelectDimension")
-              as |dimension|
-            }}
-              {{dimension}}
-            {{/power-select}}
-          </div>
-          {{!-- Resolution selector --}}
-          <div class="te-pill-selectors__range-picker col-md-3">
-            {{#power-select
-              triggerId="select-resolution"
-              triggerClass="te-form__select"
-              options=resolutionOptions
-              searchEnabled=false
-              matchTriggerWidth=true
-              matchContentWidth=true
-              selected=selectedResolution
-              onchange=(action "onSelectResolution")
-              as |resolution|
-            }}
-              {{resolution}}
-            {{/power-select}}
-          </div>
+      <div class="te-pill-selectors">
+        {{!-- Dimension selector --}}
+        <div class="te-form__select te-form__select--wider col-md-3">
+          {{#power-select
+            triggerId="select-dimension"
+            triggerClass="te-form__select"
+            options=dimensionOptions
+            searchEnabled=false
+            matchTriggerWidth=true
+            matchContentWidth=true
+            selected=selectedDimension
+            onchange=(action "onSelectDimension")
+            as |dimension|
+          }}
+            {{dimension}}
+          {{/power-select}}
         </div>
-      {{/if}}
+        {{!-- Resolution selector --}}
+        <div class="te-pill-selectors__range-picker col-md-3">
+          {{#power-select
+            triggerId="select-resolution"
+            triggerClass="te-form__select"
+            options=resolutionOptions
+            searchEnabled=false
+            matchTriggerWidth=true
+            matchContentWidth=true
+            selected=selectedResolution
+            onchange=(action "onSelectResolution")
+            as |resolution|
+          }}
+            {{resolution}}
+          {{/power-select}}
+        </div>
+      </div>
 
       {{!-- Missing anomaly modal --}}
       {{#te-modal
@@ -154,40 +152,45 @@
             {{/each}}
           </ul>
         </div>
+
+      {{else}}
+        No anomalies to show.
       {{/if}}
 
       {{!-- Alert anomaly table --}}
       <table class="te-anomaly-table">
         {{#if filteredAnomalies}}
-          <thead>
-            <tr class="te-anomaly-table__row te-anomaly-table__head">
-               <th class="te-anomaly-table__cell-head">
-                <a class="te-anomaly-table__cell-link" {{action "toggleSortDirection" "start"}}>
-                  Start/Duration (PDT)
-                  <i class="te-anomaly-table__icon glyphicon {{if sortColumnStartUp "glyphicon-menu-up" "glyphicon-menu-down"}}"></i>
-                </a>
-               </th>
-               <th class="te-anomaly-table__cell-head te-anomaly-table__cell-head--fixed">Dimensions</th>
-               <th class="te-anomaly-table__cell-head">
-                <a class="te-anomaly-table__cell-link" {{action "toggleSortDirection" "score"}}>
-                  Severity Score
-                  <i class="te-anomaly-table__icon glyphicon {{if sortColumnScoreUp "glyphicon-menu-up" "glyphicon-menu-down"}}"></i>
-                </a>
-               </th>
-               <th class="te-anomaly-table__cell-head">
-                <a class="te-anomaly-table__cell-link" {{action "toggleSortDirection" "change"}}>
-                  {{baselineTitle}}
-                  <i class="te-anomaly-table__icon glyphicon {{if sortColumnChangeUp "glyphicon-menu-up" "glyphicon-menu-down"}}"></i>
-                </a>
-               </th>
-               <th class="te-anomaly-table__cell-head">
-                <a class="te-anomaly-table__cell-link" {{action "toggleSortDirection" "resolution"}}>
-                  Resolution
-                  <i class="te-anomaly-table__icon glyphicon {{if sortColumnResolutionUp "glyphicon-menu-up" "glyphicon-menu-down"}}"></i>
-                </a>
+        <thead>
+          <tr class="te-anomaly-table__row te-anomaly-table__head">
+             <th class="te-anomaly-table__cell-head">
+              <a class="te-anomaly-table__cell-link" {{action "toggleSortDirection" "start"}}>
+                Start/Duration (PDT)
+                <i class="te-anomaly-table__glyph glyphicon {{if sortColumnStartUp "glyphicon-menu-up" "glyphicon-menu-down"}}"></i>
+              </a>
              </th>
-            </tr>
-          </thead>
+             <th class="te-anomaly-table__cell-head">Dimensions</th>
+             <th class="te-anomaly-table__cell-head">
+              <a class="te-anomaly-table__cell-link" {{action "toggleSortDirection" "score"}}>
+                Severity Score
+                <i class="te-anomaly-table__glyph glyphicon {{if sortColumnScoreUp "glyphicon-menu-up" "glyphicon-menu-down"}}"></i>
+              </a>
+             </th>
+             <th class="te-anomaly-table__cell-head">
+              <a class="te-anomaly-table__cell-link" {{action "toggleSortDirection" "change"}}>
+                {{baselineTitle}}
+                <i class="te-anomaly-table__glyph glyphicon {{if sortColumnChangeUp "glyphicon-menu-up" "glyphicon-menu-down"}}"></i>
+              </a>
+             </th>
+             <th class="te-anomaly-table__cell-head">
+              <a class="te-anomaly-table__cell-link" {{action "toggleSortDirection" "resolution"}}>
+                Resolution
+                <i class="te-anomaly-table__glyph glyphicon {{if sortColumnResolutionUp "glyphicon-menu-up" "glyphicon-menu-down"}}"></i>
+              </a>
+           </th>
+          </tr>
+        </thead>
+        {{else}}
+          No anomalies to show.
         {{/if}}
         <tbody>
           {{#each paginatedFilteredAnomalies as |anomaly|}}
@@ -206,7 +209,7 @@
                 <ul class="te-anomaly-table__list">
                  {{#each anomaly.dimensionList as |dimension|}}
                     <li class="te-anomaly-table__list--smaller">
-                      {{dimension.dimensionKey}}: <span class="stronger">{{dimension.dimensionVal}}</span>
+                      {{dimension.dimensionKey}}: {{dimension.dimensionVal}}
                     </li>
                  {{else}}
                     -
@@ -217,37 +220,31 @@
                <td class="te-anomaly-table__cell">
                 <ul class="te-anomaly-table__list">
                   <li>{{anomaly.shownCurrent}} / {{anomaly.shownBaseline}}</li>
-                  <li class="te-anomaly-table__list--warning">({{anomaly.changeDirection}}{{anomaly.shownChangeRate}}%)</li>
+                  <li class="te-anomaly-table__list--warning">({{anomaly.shownChangeRate}}%)</li>
                 </ul>
                </td>
                <td class="te-anomaly-table__cell">
                   {{#if anomaly.showResponseSaved}}
-                    <i class="te-anomaly-table__icon--status glyphicon glyphicon-ok-circle"></i>
+                    <i class="te-anomaly-table__glyph--status glyphicon glyphicon-ok-circle"></i>
                   {{/if}}
 
                   {{#if anomaly.showResponseFailed}}
-                    <i class="te-anomaly-table__icon--status glyphicon glyphicon-remove-circle"></i>
+                    <i class="te-anomaly-table__glyph--status glyphicon glyphicon-remove-circle"></i>
                   {{/if}}
 
-                  {{#if anomaly.isUserReported}}
-                    <span class="te-anomaly-table__text">User Reported</span>
-                  {{else}}
-                    {{#power-select
-                      triggerId=anomaly.anomalyId
-                      triggerClass="te-anomaly-table__select"
-                      options=responseOptions
-                      searchEnabled=false
-                      selected=anomaly.anomalyFeedback
-                      onchange=(action "onChangeAnomalyResponse" anomaly)
-                      as |response|
-                    }}
-                      {{response}}
-                    {{/power-select}}
-                  {{/if}}
+                  {{#power-select
+                    triggerId=anomaly.anomalyId
+                    triggerClass="te-anomaly-table__select"
+                    options=responseOptions
+                    searchEnabled=false
+                    selected=anomaly.anomalyFeedback
+                    onchange=(action "onChangeAnomalyResponse" anomaly)
+                    as |response|
+                  }}
+                    {{response}}
+                  {{/power-select}}
 
-                  <div class="te-anomaly-table__link-wrapper">
-                    <a target="_blank" class="te-anomaly-table__link" href="/thirdeye#anomalies?anomaliesSearchMode=id&pageNumber=1&anomalyIds={{anomaly.anomalyId}}">Investigate</a>
-                  </div>
+                  <a target="_blank" class="te-anomaly-table__link" href="/thirdeye#anomalies?anomaliesSearchMode=id&pageNumber=1&anomalyIds={{anomaly.anomalyId}}">investigate</a>
                </td>
             </tr>
           {{/each}}
@@ -287,13 +284,19 @@
     </div>
 
   {{else}}
+
     <div class="te-alert-page-pending">
-      <img src="{{rootURL}}assets/images/te-alert-pending.png" class="te-alert-page-pending__image" alt="alert setup processing">
-      <h2 class="te-alert-page-pending__title">Setting up your alert</h2>
-      <div class="te-alert-page-pending__loader"></div>
+      <img src="{{rootURL}}assets/images/te-alert-{{if isReplayStatusError "error" "pending"}}.png" class="te-alert-page-pending__image {{if isReplayStatusError "te-alert-page-pending__image--error"}}" alt="alertData.Setup is Processing">
+      <h2 class="te-alert-page-pending__title">{{if isReplayStatusError "Oops, something went wrong." "Setting up your alert"}}</h2>
+      {{#if (not isReplayStatusError)}}<div class="te-alert-page-pending__loader"></div>{{/if}}
       <p class="te-alert-page-pending__text">
-        This may take up to a minute<br/>We will send you an email when it's done!
+        {{#if isReplayStatusError}}
+          Your alert <span class="stronger">{{functionName}}</span> was created, but data replay has failed.<br>Please contact <a class="thirdeye-link-secondary" target="_blank" href="{{replayErrorMailtoStr}}">ask_thirdeye@linkedin.com</a>
+        {{else}}
+          This may take a while (up to a few minutes) <br/>We will send you an email when it's done!
+        {{/if}}
       </p>
     </div>
+
   {{/if}}
 </div>

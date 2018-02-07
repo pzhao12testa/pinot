@@ -28,6 +28,7 @@ import com.linkedin.pinot.core.operator.blocks.DocIdSetBlock;
 import com.linkedin.pinot.core.operator.blocks.IntermediateResultsBlock;
 import com.linkedin.pinot.core.operator.blocks.ProjectionBlock;
 import com.linkedin.pinot.core.query.selection.SelectionOperatorService;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -65,7 +66,7 @@ public class MSelectionOrderByOperator extends BaseOperator<IntermediateResultsB
     _selectionColumns.addAll(_selection.getSelectionColumns());
     if ((_selectionColumns.size() == 1) && ((_selectionColumns.toArray(new String[0]))[0].equals("*"))) {
       _selectionColumns.clear();
-      _selectionColumns.addAll(indexSegment.getColumnNames());
+      _selectionColumns.addAll(Arrays.asList(indexSegment.getColumnNames()));
     }
     if (_selection.getSelectionSortSequence() != null) {
       for (SelectionSort selectionSort : _selection.getSelectionSortSequence()) {

@@ -19,7 +19,6 @@ const dateFormat = 'YYYY-MM-DD';
 /**
  * Basic alert page defaults
  */
-const defaultSeverity = 30;
 const paginationDefault = 10;
 const durationDefault = '1m';
 const metricDataColor = 'blue';
@@ -43,6 +42,10 @@ const anomalyResponseObj = [
     value: 'NOT_ANOMALY',
     status: 'False Alarm'
   },
+  { name: 'I don\'t know',
+    value: 'NO_FEEDBACK',
+    status: 'Not Resolved'
+  },
   { name: 'Confirmed - New Trend',
     value: 'ANOMALY_NEW_TREND',
     status: 'New Trend'
@@ -64,26 +67,6 @@ const fetchCombinedAnomalies = (anomalyIds) => {
       return RSVP.resolve(getAnomalies);
     });
     return RSVP.all(anomalyPromiseHash);
-  } else {
-    return RSVP.resolve([]);
-  }
-};
-
-/**
- * Fetches severity scores for all anomalies
- * TODO: Move this and other shared requests to a common service
- * @param {Array} anomalyIds - list of all found anomaly ids
- * @returns {RSVP promise}
- */
-const fetchSeverityScores = (anomalyIds) => {
-  if (anomalyIds && anomalyIds.length) {
-    const anomalyPromiseHash = anomalyIds.map((id) => {
-      return RSVP.hash({
-        id,
-        score: fetch(`/dashboard/anomalies/score/${id}`).then(checkStatus)
-      });
-    });
-    return RSVP.allSettled(anomalyPromiseHash);
   } else {
     return RSVP.resolve([]);
   }
@@ -196,10 +179,12 @@ export default Route.extend({
     } = transition.queryParams;
 
     // Prepare endpoints for eval, mttd, projected metrics calls
-    const dateParams = `start=${toIso(startDate)}&end=${toIso(endDate)}`;
-    const evalUrl = `/detection-job/eval/filter/${id}?${dateParams}`;
-    const mttdUrl = `/detection-job/eval/mttd/${id}?severity=${defaultSeverity/100}`;
+    const tuneParams = `start=${toIso(startDate)}&end=${toIso(endDate)}`;
+    const tuneUrl = `/detection-job/autotune/filter/${id}?${tuneParams}`;
+    const evalUrl = `/detection-job/eval/filter/${id}?${tuneParams}`;
+    const mttdUrl = `/detection-job/eval/mttd/${id}`;
     const performancePromiseHash = {
+      autotuneId: fetch(tuneUrl, postProps('')).then(checkStatus),
       current: fetch(`${evalUrl}&isProjected=FALSE`).then(checkStatus),
       projected: fetch(`${evalUrl}&isProjected=TRUE`).then(checkStatus),
       mttd: fetch(mttdUrl).then(checkStatus)
@@ -216,7 +201,7 @@ export default Route.extend({
           duration,
           startDate,
           endDate,
-          dateParams,
+          tuneParams,
           alertEvalMetrics
         };
       })
@@ -269,15 +254,16 @@ export default Route.extend({
       exploreDimensions
     };
 
-    // Load endpoints for projected metrics. TODO: consolidate into CP if duplicating this logic
+    // Load endpoints for projected metrics
     const qsParams = `start=${baseStart.utc().format(dateFormat)}&end=${baseEnd.utc().format(dateFormat)}&useNotified=true`;
-    const dateParams = `start=${toIso(startDate)}&end=${toIso(endDate)}`;
+    const tuneParams = `start=${toIso(startDate)}&end=${toIso(endDate)}`;
     const anomalyDataUrl = `/anomalies/search/anomalyIds/${startStamp}/${endStamp}/1?anomalyIds=`;
+    const projectedMttdUrl = `/detection-job/eval/projected/mttd/${alertEvalMetrics.autotuneId}`;
     const metricsUrl = `/data/autocomplete/metric?name=${dataset}::${metricName}`;
     const anomaliesUrl = `/dashboard/anomaly-function/${alertId}/anomalies?${qsParams}`;
 
     const anomalyPromiseHash = {
-      projectedMttd: 0, // In overview mode, no projected MTTD value is needed
+      projectedMttd: fetch(projectedMttdUrl).then(checkStatus),
       metricsByName: fetch(metricsUrl).then(checkStatus),
       anomalyIds: fetch(anomaliesUrl).then(checkStatus)
     };
@@ -335,7 +321,6 @@ export default Route.extend({
     // Initial value setup for displayed option lists
     let subD = {};
     let anomalyData = [];
-    let rawAnomalies = [];
     const notCreateError = jobId !== -1;
     const resolutionOptions = ['All Resolutions'];
     const dimensionOptions = ['All Dimensions'];
@@ -354,7 +339,6 @@ export default Route.extend({
       jobId,
       functionName,
       alertId: id,
-      defaultSeverity,
       isMetricDataInvalid: false,
       anomalyDataUrl,
       baselineOptions,
@@ -377,11 +361,7 @@ export default Route.extend({
     if (notCreateError) {
       fetchCombinedAnomalies(anomalyIds)
         .then((rawAnomalyData) => {
-          rawAnomalies = rawAnomalyData;
-          return fetchSeverityScores(anomalyIds);
-        })
-        .then((severityScores) => {
-          anomalyData = enhanceAnomalies(rawAnomalies, severityScores);
+          anomalyData = enhanceAnomalies(rawAnomalyData);
           resolutionOptions.push(...new Set(anomalyData.map(record => record.anomalyFeedback)));
           dimensionOptions.push(...new Set(anomalyData.map(anomaly => anomaly.dimensionString)));
           controller.setProperties({

@@ -459,7 +459,6 @@ public class AnomaliesResource {
 
     MergedAnomalyResultDTO anomaly = new MergedAnomalyResultDTO();
     anomaly.setFunction(anomalyFunction);
-    anomaly.setFunctionId(anomalyFunction.getId());
     anomaly.setStartTime(startTime);
     anomaly.setEndTime(endTime);
     anomaly.setDimensions(new DimensionMap(dimensionsJson != null ? dimensionsJson : "{}"));

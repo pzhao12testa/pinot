@@ -43,13 +43,13 @@ public class TableSize {
   private static Logger LOGGER = LoggerFactory.getLogger(TableSize.class);
 
   @Inject
-  ControllerConf _controllerConf;
+  ControllerConf controllerConf;
   @Inject
-  PinotHelixResourceManager _pinotHelixResourceManager;
+  PinotHelixResourceManager pinotHelixResourceManager;
   @Inject
-  Executor _executor;
+  Executor executor;
   @Inject
-  HttpConnectionManager _connectionManager;
+  HttpConnectionManager connectionManager;
 
   @GET
   @Path("/tables/{tableName}/size")
@@ -66,11 +66,11 @@ public class TableSize {
           @QueryParam("detailed") boolean detailed
   ) {
     TableSizeReader
-        tableSizeReader = new TableSizeReader(_executor, _connectionManager, _pinotHelixResourceManager);
+        tableSizeReader = new TableSizeReader(executor, connectionManager, pinotHelixResourceManager);
     TableSizeReader.TableSizeDetails tableSizeDetails = null;
     try {
       tableSizeDetails = tableSizeReader.getTableSizeDetails(tableName,
-          _controllerConf.getServerAdminRequestTimeoutSeconds() * 1000);
+          controllerConf.getServerAdminRequestTimeoutSeconds() * 1000);
     } catch (Throwable t) {
       throw new ControllerApplicationException(LOGGER, String.format("Failed to read table size for %s", tableName),
           Response.Status.INTERNAL_SERVER_ERROR, t);

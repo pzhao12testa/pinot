@@ -258,7 +258,8 @@ public class HLRealtimeSegmentDataManager extends RealtimeSegmentDataManager {
           // kill the timer first
           segmentStatusTask.cancel();
           updateCurrentDocumentCountMetrics();
-          segmentLogger.info("Indexed {} raw events", realtimeSegment.getNumDocsIndexed());
+          segmentLogger.info("Indexed {} raw events, current number of docs = {}",
+              realtimeSegment.getRawDocumentCount(), realtimeSegment.getSegmentMetadata().getTotalDocs());
           File tempSegmentFolder = new File(resourceTmpDir, "tmp-" + String.valueOf(System.currentTimeMillis()));
 
           // lets convert the segment now
@@ -358,8 +359,8 @@ public class HLRealtimeSegmentDataManager extends RealtimeSegmentDataManager {
             metadataToOverwrite.setStatus(Status.DONE);
             metadataToOverwrite.setStartTime(segStartTime);
             metadataToOverwrite.setEndTime(segEndTime);
+            metadataToOverwrite.setTotalRawDocs(realtimeSegment.getSegmentMetadata().getTotalDocs());
             metadataToOverwrite.setTimeUnit(timeUnit);
-            metadataToOverwrite.setTotalRawDocs(realtimeSegment.getNumDocsIndexed());
             notifier.notifySegmentCommitted(metadataToOverwrite, segment);
             segmentLogger.info("Completed write of segment completion to Helix, waiting for controller to assign a new segment");
           } catch (Exception e) {
@@ -395,18 +396,22 @@ public class HLRealtimeSegmentDataManager extends RealtimeSegmentDataManager {
 
   private void computeKeepIndexing() {
     if (keepIndexing) {
-      segmentLogger.debug("Current indexed {} raw events", realtimeSegment.getNumDocsIndexed());
+      segmentLogger.debug(
+          "Current indexed " + realtimeSegment.getRawDocumentCount() + " raw events, success = " + realtimeSegment
+              .getSuccessIndexedCount() + " docs, total = " + realtimeSegment.getSegmentMetadata().getTotalDocs()
+              + " docs in realtime segment");
       if ((System.currentTimeMillis() >= segmentEndTimeThreshold)
-          || realtimeSegment.getNumDocsIndexed() >= kafkaStreamProviderConfig.getSizeThresholdToFlushSegment()) {
-        if (realtimeSegment.getNumDocsIndexed() == 0) {
+          || realtimeSegment.getRawDocumentCount() >= kafkaStreamProviderConfig.getSizeThresholdToFlushSegment()) {
+        if (realtimeSegment.getRawDocumentCount() == 0) {
           segmentLogger.info("no new events coming in, extending the end time by another hour");
           segmentEndTimeThreshold =
               System.currentTimeMillis() + kafkaStreamProviderConfig.getTimeThresholdToFlushSegment();
           return;
         }
         segmentLogger.info(
-            "Stopped indexing due to reaching segment limit: {} raw documents indexed, segment is aged {} minutes",
-            realtimeSegment.getNumDocsIndexed(), ((System.currentTimeMillis() - start) / (ONE_MINUTE_IN_MILLSEC)));
+            "Stopped indexing due to reaching segment limit: {} raw documents indexed, segment is aged {} minutes"
+                , realtimeSegment.getRawDocumentCount() , ((System.currentTimeMillis() - start)
+                / (ONE_MINUTE_IN_MILLSEC)));
         keepIndexing = false;
       }
     }
@@ -414,7 +419,7 @@ public class HLRealtimeSegmentDataManager extends RealtimeSegmentDataManager {
   }
 
   private void updateCurrentDocumentCountMetrics() {
-    int currentRawDocs = realtimeSegment.getNumDocsIndexed();
+    int currentRawDocs = realtimeSegment.getRawDocumentCount();
     serverMetrics.addValueToTableGauge(tableName, ServerGauge.DOCUMENT_COUNT, (currentRawDocs - lastUpdatedRawDocuments.get()));
     lastUpdatedRawDocuments.set(currentRawDocs);
   }

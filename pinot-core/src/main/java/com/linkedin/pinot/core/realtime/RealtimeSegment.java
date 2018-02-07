@@ -15,33 +15,54 @@
  */
 package com.linkedin.pinot.core.realtime;
 
+import java.util.List;
+
+import org.joda.time.Interval;
+
+import com.linkedin.pinot.common.data.Schema;
 import com.linkedin.pinot.core.data.GenericRow;
-import com.linkedin.pinot.core.indexsegment.IndexSegment;
+import com.linkedin.pinot.core.data.readers.RecordReader;
 
 
-public interface RealtimeSegment extends IndexSegment {
-
-  /**
-   * Indexes a record into the segment.
-   *
-   * @param row Record represented as a {@link GenericRow}
-   * @return Whether the segment is full (i.e. cannot index more record into it)
-   */
-  boolean index(GenericRow row);
+public interface RealtimeSegment extends MutableIndexSegment {
 
   /**
-   * Returns the number of records already indexed into the segment.
-   *
-   * @return The number of records indexed
+   * Schema has the list of all dimentions, metrics and time columns.
+   * it also should contain data type for each of them
+   * for Time column it expects that there is a
+   * Time column Type (int, long etc) and an associated TimeUnit (days, hours etc)
+   * @param dataSchema
    */
-  int getNumDocsIndexed();
+  public void init(Schema dataSchema);
 
   /**
-   * Returns the record for the given document Id.
+   * returns a RecordReader implementation
+   * which can be used to create an offline segment.
    *
-   * @param docId Document
-   * @param reuse Reusable buffer for the record
-   * @return The record for the given document Id
+   * @return
    */
-  GenericRow getRecord(int docId, GenericRow reuse);
+  public RecordReader getRecordReader();
+
+  /**
+   *
+   * @param docId
+   * @return
+   */
+  public GenericRow getRawValueRowAt(int docId, GenericRow row);
+
+  /**
+   * this will return the total number of documents that have been indexed to far,
+   * this is so that the indexing Coordination (if it chooses to) can decided
+   * when to convert this segment to immutable.
+   * @return
+   */
+  @Override
+  public int getAggregateDocumentCount();
+
+  /**
+   * returns the time interval of that datathat has currently been indexed
+   * @return
+   */
+  public Interval getTimeInterval();
+
 }

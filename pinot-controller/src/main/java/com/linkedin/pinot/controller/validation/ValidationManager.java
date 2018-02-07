@@ -22,6 +22,7 @@ import com.linkedin.pinot.common.metadata.segment.OfflineSegmentZKMetadata;
 import com.linkedin.pinot.common.metadata.segment.RealtimeSegmentZKMetadata;
 import com.linkedin.pinot.common.metadata.stream.KafkaStreamMetadata;
 import com.linkedin.pinot.common.metrics.ValidationMetrics;
+import com.linkedin.pinot.common.segment.SegmentMetadata;
 import com.linkedin.pinot.common.utils.CommonConstants.Helix.TableType;
 import com.linkedin.pinot.common.utils.HLCSegmentName;
 import com.linkedin.pinot.common.utils.LLCSegmentName;
@@ -32,6 +33,7 @@ import com.linkedin.pinot.controller.ControllerConf;
 import com.linkedin.pinot.controller.helix.core.PinotHelixResourceManager;
 import com.linkedin.pinot.controller.helix.core.PinotHelixSegmentOnlineOfflineStateModelGenerator;
 import com.linkedin.pinot.controller.helix.core.realtime.PinotLLCRealtimeSegmentManager;
+import com.linkedin.pinot.core.segment.index.SegmentMetadataImpl;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -56,7 +58,7 @@ import org.slf4j.LoggerFactory;
 /**
  * Manages the segment validation metrics, to ensure that all offline segments are contiguous (no missing segments) and
  * that the offline push delay isn't too high.
- */
+*/
 
 public class ValidationManager {
   private static final Logger LOGGER = LoggerFactory.getLogger(ValidationManager.class);
@@ -134,22 +136,23 @@ public class ValidationManager {
     List<String> allTableNames = _pinotHelixResourceManager.getAllTables();
     ZkHelixPropertyStore<ZNRecord> propertyStore = _pinotHelixResourceManager.getPropertyStore();
 
-    for (String tableNameWithType : allTableNames) {
-      _pinotHelixResourceManager.rebuildBrokerResourceFromHelixTags(tableNameWithType);
-      LOGGER.info("Starting to validate table: {}", tableNameWithType);
+    for (String tableName : allTableNames) {
+      List<SegmentMetadata> segmentMetadataList = new ArrayList<SegmentMetadata>();
 
+      TableType tableType = TableNameBuilder.getTableTypeFromTableName(tableName);
+      TableConfig tableConfig = null;
+
+      _pinotHelixResourceManager.rebuildBrokerResourceFromHelixTags(tableName);
       // For each table, fetch the metadata for all its segments
-      TableType tableType = TableNameBuilder.getTableTypeFromTableName(tableNameWithType);
-      if (tableType == TableType.OFFLINE) {
-        validateOfflineSegmentPush(propertyStore, tableNameWithType);
-      } else {
-        List<RealtimeSegmentZKMetadata> realtimeSegmentZKMetadataList =
-            ZKMetadataProvider.getRealtimeSegmentZKMetadataListForTable(propertyStore, tableNameWithType);
+      if (tableType.equals(TableType.OFFLINE)) {
+        validateOfflineSegmentPush(propertyStore, tableName, segmentMetadataList);
+      } else if (tableType.equals(TableType.REALTIME)) {
+        LOGGER.info("Starting to validate table {}", tableName);
+        List<RealtimeSegmentZKMetadata> realtimeSegmentZKMetadatas = ZKMetadataProvider.getRealtimeSegmentZKMetadataListForTable(propertyStore, tableName);
         boolean countHLCSegments = true;  // false if this table has ONLY LLC segments (i.e. fully migrated)
-        TableConfig tableConfig = null;
         KafkaStreamMetadata streamMetadata = null;
         try {
-          tableConfig = _pinotHelixResourceManager.getRealtimeTableConfig(tableNameWithType);
+          tableConfig = _pinotHelixResourceManager.getRealtimeTableConfig(tableName);
           if (tableConfig == null) {
             continue;
           }
@@ -157,21 +160,27 @@ public class ValidationManager {
           if (streamMetadata.hasSimpleKafkaConsumerType() && !streamMetadata.hasHighLevelKafkaConsumerType()) {
             countHLCSegments = false;
           }
+          for (RealtimeSegmentZKMetadata realtimeSegmentZKMetadata : realtimeSegmentZKMetadatas) {
+            SegmentMetadata segmentMetadata = new SegmentMetadataImpl(realtimeSegmentZKMetadata);
+            segmentMetadataList.add(segmentMetadata);
+          }
           // Update the gauge to contain the total document count in the segments
-          _validationMetrics.updateTotalDocumentCountGauge(tableNameWithType,
-              computeRealtimeTotalDocumentInSegments(realtimeSegmentZKMetadataList, countHLCSegments));
+          _validationMetrics.updateTotalDocumentCountGauge(tableName, computeRealtimeTotalDocumentInSegments(segmentMetadataList,
+              countHLCSegments));
           if (streamMetadata.hasSimpleKafkaConsumerType()) {
-            validateLLCSegments(tableNameWithType, tableConfig);
+            validateLLCSegments(tableName, tableConfig);
           }
         } catch (Exception e) {
           if (tableConfig == null) {
-            LOGGER.warn("Cannot get realtime table config for table: {}", tableNameWithType);
+            LOGGER.warn("Cannot get realtime tableconfig for {}", tableName);
           } else if (streamMetadata == null) {
-            LOGGER.warn("Cannot get stream config for table: {}", tableNameWithType);
+            LOGGER.warn("Cannot get streamconfig for {}", tableName);
           } else {
-            LOGGER.error("Exception while validating table: {}", tableNameWithType, e);
+            LOGGER.error("Exception while validating table {}", tableName, e);
           }
         }
+      } else {
+        LOGGER.warn("Ignoring table type {} for table {}", tableType, tableName);
       }
     }
     LOGGER.info("Validation completed");
@@ -226,7 +235,7 @@ public class ValidationManager {
           nonConsumingKafkaPartitions.remove(llcSegmentName.getPartitionId());
         }
       }
-    }
+     }
 
     // Kafka partition set now has all the partitions that do not have any segments in CONSUMING state.
     if (!llcSegments.isEmpty()) {
@@ -249,46 +258,53 @@ public class ValidationManager {
   }
 
   // For offline segment pushes, validate that there are no missing segments, and update metrics
-  private void validateOfflineSegmentPush(ZkHelixPropertyStore<ZNRecord> propertyStore, String offlineTableName) {
-    List<OfflineSegmentZKMetadata> offlineSegmentZKMetadataList =
-        ZKMetadataProvider.getOfflineSegmentZKMetadataListForTable(propertyStore, offlineTableName);
+  private void validateOfflineSegmentPush(ZkHelixPropertyStore<ZNRecord> propertyStore, String tableName,
+      List<SegmentMetadata> segmentMetadataList) {
+    List<OfflineSegmentZKMetadata> offlineSegmentZKMetadatas = ZKMetadataProvider
+        .getOfflineSegmentZKMetadataListForTable(propertyStore, tableName);
+    for (OfflineSegmentZKMetadata offlineSegmentZKMetadata : offlineSegmentZKMetadatas) {
+      SegmentMetadata segmentMetadata = new SegmentMetadataImpl(offlineSegmentZKMetadata);
+      segmentMetadataList.add(segmentMetadata);
+    }
+
+    // Calculate missing segments only for offline tables
+    int missingSegmentCount = 0;
 
     // Compute the missing segments if there are at least two
-    int numMissingSegments = 0;
-    int numSegments = offlineSegmentZKMetadataList.size();
-    if (numSegments >= 2) {
-      List<Interval> segmentIntervals = new ArrayList<>(numSegments);
-      Duration timeGranularity = null;
-      for (OfflineSegmentZKMetadata offlineSegmentZKMetadata : offlineSegmentZKMetadataList) {
-        Interval timeInterval = offlineSegmentZKMetadata.getTimeInterval();
-        if (timeInterval != null && TimeUtils.timeValueInValidRange(timeInterval.getStartMillis())
-            && TimeUtils.timeValueInValidRange(timeInterval.getEndMillis())) {
+    if (2 < segmentMetadataList.size()) {
+      List<Interval> segmentIntervals = new ArrayList<Interval>();
+      for (SegmentMetadata segmentMetadata : segmentMetadataList) {
+        Interval timeInterval = segmentMetadata.getTimeInterval();
+        if (timeInterval != null && TimeUtils.timeValueInValidRange(timeInterval.getStartMillis()) && TimeUtils
+                .timeValueInValidRange(timeInterval.getEndMillis())) {
           segmentIntervals.add(timeInterval);
-          timeGranularity = offlineSegmentZKMetadata.getTimeGranularity();
         }
       }
-      List<Interval> missingIntervals = computeMissingIntervals(segmentIntervals, timeGranularity);
+
+      List<Interval> missingIntervals = computeMissingIntervals(segmentIntervals, segmentMetadataList.get(0).getTimeGranularity());
+      missingSegmentCount = missingIntervals.size();
+
       for (Interval missingInterval : missingIntervals) {
-        LOGGER.warn("Missing data in table {} for time interval {}", offlineTableName, missingInterval);
+        LOGGER.warn("Missing data in table {} for time interval {}", tableName, missingInterval);
       }
-      numMissingSegments = missingIntervals.size();
     }
+
     // Update the gauge that contains the number of missing segments
-    _validationMetrics.updateMissingSegmentCountGauge(offlineTableName, numMissingSegments);
+    _validationMetrics.updateMissingSegmentCountGauge(tableName, missingSegmentCount);
 
     // Compute the max segment end time and max segment push time
     long maxSegmentEndTime = Long.MIN_VALUE;
     long maxSegmentPushTime = Long.MIN_VALUE;
 
-    for (OfflineSegmentZKMetadata offlineSegmentZKMetadata : offlineSegmentZKMetadataList) {
-      Interval segmentInterval = offlineSegmentZKMetadata.getTimeInterval();
+    for (SegmentMetadata segmentMetadata : segmentMetadataList) {
+      Interval segmentInterval = segmentMetadata.getTimeInterval();
 
       if (segmentInterval != null && maxSegmentEndTime < segmentInterval.getEndMillis()) {
         maxSegmentEndTime = segmentInterval.getEndMillis();
       }
 
-      long segmentPushTime = offlineSegmentZKMetadata.getPushTime();
-      long segmentRefreshTime = offlineSegmentZKMetadata.getRefreshTime();
+      long segmentPushTime = segmentMetadata.getPushTime();
+      long segmentRefreshTime = segmentMetadata.getRefreshTime();
       long segmentUpdateTime = Math.max(segmentPushTime, segmentRefreshTime);
 
       if (maxSegmentPushTime < segmentUpdateTime) {
@@ -297,31 +313,31 @@ public class ValidationManager {
     }
 
     // Update the gauges that contain the delay between the current time and last segment end time
-    _validationMetrics.updateOfflineSegmentDelayGauge(offlineTableName, maxSegmentEndTime);
-    _validationMetrics.updateLastPushTimeGauge(offlineTableName, maxSegmentPushTime);
+    _validationMetrics.updateOfflineSegmentDelayGauge(tableName, maxSegmentEndTime);
+    _validationMetrics.updateLastPushTimeGauge(tableName, maxSegmentPushTime);
     // Update the gauge to contain the total document count in the segments
-    _validationMetrics.updateTotalDocumentCountGauge(offlineTableName,
-        computeOfflineTotalDocumentInSegments(offlineSegmentZKMetadataList));
+    _validationMetrics.updateTotalDocumentCountGauge(tableName, computeOfflineTotalDocumentInSegments(segmentMetadataList));
     // Update the gauge to contain the total number of segments for this table
-    _validationMetrics.updateSegmentCountGauge(offlineTableName, numSegments);
+    _validationMetrics.updateSegmentCountGauge(tableName, segmentMetadataList.size());
   }
 
-  public static long computeOfflineTotalDocumentInSegments(
-      List<OfflineSegmentZKMetadata> offlineSegmentZKMetadataList) {
-    long numTotalDocs = 0;
-    for (OfflineSegmentZKMetadata offlineSegmentZKMetadata : offlineSegmentZKMetadataList) {
-      numTotalDocs += offlineSegmentZKMetadata.getTotalRawDocs();
+  public static long computeOfflineTotalDocumentInSegments(List<SegmentMetadata> segmentMetadataList)  {
+    long totalDocumentCount = 0;
+
+    for (SegmentMetadata segmentMetadata : segmentMetadataList) {
+      totalDocumentCount += segmentMetadata.getTotalRawDocs();
     }
-    return numTotalDocs;
+    return totalDocumentCount;
   }
 
-  public static long computeRealtimeTotalDocumentInSegments(
-      List<RealtimeSegmentZKMetadata> realtimeSegmentZKMetadataList, boolean countHLCSegments) {
-    long numTotalDocs = 0;
+  public static long computeRealtimeTotalDocumentInSegments(List<SegmentMetadata> segmentMetadataList,
+      boolean countHLCSegments)  {
+    long totalDocumentCount = 0;
 
     String groupId = "";
-    for (RealtimeSegmentZKMetadata realtimeSegmentZKMetadata : realtimeSegmentZKMetadataList) {
-      String segmentName = realtimeSegmentZKMetadata.getSegmentName();
+
+    for (SegmentMetadata segmentMetadata : segmentMetadataList) {
+      String segmentName = segmentMetadata.getName();
       if (SegmentName.isHighLevelConsumerSegmentName(segmentName)) {
         if (countHLCSegments) {
           HLCSegmentName hlcSegmentName = new HLCSegmentName(segmentName);
@@ -331,19 +347,18 @@ public class ValidationManager {
             groupId = segmentGroupIdName;
           }
           // Discard all segments with different groupids as they are replicas
-          if (groupId.equals(segmentGroupIdName) && realtimeSegmentZKMetadata.getTotalRawDocs() >= 0) {
-            numTotalDocs += realtimeSegmentZKMetadata.getTotalRawDocs();
+          if (groupId.equals(segmentGroupIdName) && segmentMetadata.getTotalRawDocs() >= 0) {
+            totalDocumentCount += segmentMetadata.getTotalRawDocs();
           }
         }
       } else {
         // Low level segments
         if (!countHLCSegments) {
-          numTotalDocs += realtimeSegmentZKMetadata.getTotalRawDocs();
+          totalDocumentCount += segmentMetadata.getTotalRawDocs();
         }
       }
     }
-
-    return numTotalDocs;
+    return totalDocumentCount;
   }
 
   /**
@@ -355,7 +370,7 @@ public class ValidationManager {
    * @return The list of missing intervals
    */
   public static List<Interval> computeMissingIntervals(List<Interval> segmentIntervals, Duration frequency) {
-    // Sanity check for frequency
+    // Sanity check for freuency
     if (frequency == null) {
       return Collections.emptyList();
     }
@@ -375,11 +390,10 @@ public class ValidationManager {
     Collections.sort(sortedSegmentIntervals, new Comparator<Interval>() {
       @Override
       public int compare(Interval first, Interval second) {
-        if (first.getStartMillis() < second.getStartMillis()) {
+        if (first.getStartMillis() < second.getStartMillis())
           return -1;
-        } else if (second.getStartMillis() < first.getStartMillis()) {
+        else if (second.getStartMillis() < first.getStartMillis())
           return 1;
-        }
         return 0;
       }
     });
@@ -403,10 +417,8 @@ public class ValidationManager {
       // If there is at least one complete missing interval between the end of the previous interval and the start of
       // the current interval, then mark the missing interval(s) as missing
       if (lastEndIntervalCount < startIntervalCount - 1) {
-        for (int missingIntervalIndex = lastEndIntervalCount + 1; missingIntervalIndex < startIntervalCount;
-            ++missingIntervalIndex) {
-          missingIntervals.add(new Interval(startTime + frequencyMillis * missingIntervalIndex,
-              startTime + frequencyMillis * (missingIntervalIndex + 1) - 1));
+        for (int missingIntervalIndex = lastEndIntervalCount + 1; missingIntervalIndex < startIntervalCount; ++missingIntervalIndex) {
+          missingIntervals.add(new Interval(startTime + frequencyMillis * missingIntervalIndex, startTime + frequencyMillis * (missingIntervalIndex + 1) - 1));
         }
       }
 
@@ -436,8 +448,7 @@ public class ValidationManager {
 
     int missingSegments = 0;
     int currentIndex = 1;
-    int expectedIntervalCount = 1;
-    while (expectedIntervalCount <= expectedSegmentCount) {
+    for (int expectedIntervalCount = 1; expectedIntervalCount <= expectedSegmentCount;) {
       // Count the number of complete intervals that are found
       final int intervalCount =
           (int) ((sortedStartTimes[currentIndex] + halfFrequencyMillis - firstStartTime) / frequencyMillis);

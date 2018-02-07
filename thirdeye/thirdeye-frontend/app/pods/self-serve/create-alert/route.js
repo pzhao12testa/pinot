@@ -73,7 +73,7 @@ export default Route.extend({
       .then((jobStatus) => {
         const createStatusObj = _.has(jobStatus, 'taskStatuses') ? jobStatus.taskStatuses.find(status => status.taskName === 'FunctionAlertCreation') : null;
         const isCreateComplete = createStatusObj ? createStatusObj.taskStatus.toLowerCase() === 'completed' : false;
-        let continuePolling = Number(moment.duration(moment().diff(onboardStartTime)).asSeconds().toFixed(0)) > 20;
+        let continuePolling = Number(moment.duration(moment().diff(onboardStartTime)).asSeconds().toFixed(0)) > 10;
 
         if (isCreateComplete) {
           // alert function is created. Redirect to alert page.
@@ -115,15 +115,11 @@ export default Route.extend({
     * @method triggerReplaySequence
     */
     triggerOnboardingJob(data) {
+      const onboardUrl = `/detection-onboard/create-job?jobName=${data.jobName}&payload=${encodeURIComponent(data.payload)}`;
       const newName = JSON.parse(data.payload).functionName;
-      const createAlertUrl = `/function-onboard/create-function?name=${newName}`;
-      const updateAlertUrl = `/detection-onboard/create-job?jobName=${data.jobName}&payload=${encodeURIComponent(data.payload)}`;
       let onboardStartTime = moment();
 
-      fetch(createAlertUrl, postProps('')).then(checkStatus)
-        .then((result) => {
-          return fetch(updateAlertUrl, postProps('')).then(checkStatus);
-        })
+      fetch(onboardUrl, postProps('')).then(checkStatus)
         .then((result) => {
           this.get('checkJobCreateStatus').perform(result.jobId, newName);
         })

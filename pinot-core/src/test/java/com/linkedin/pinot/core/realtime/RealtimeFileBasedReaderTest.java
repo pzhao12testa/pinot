@@ -15,6 +15,15 @@
  */
 package com.linkedin.pinot.core.realtime;
 
+import java.io.File;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
+import org.apache.commons.io.FileUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.testng.Assert;
+import org.testng.annotations.Test;
 import com.linkedin.pinot.common.data.FieldSpec;
 import com.linkedin.pinot.common.data.FieldSpec.FieldType;
 import com.linkedin.pinot.common.data.Schema;
@@ -37,15 +46,6 @@ import com.linkedin.pinot.core.realtime.impl.kafka.RealtimeSegmentImplTest;
 import com.linkedin.pinot.core.segment.index.loader.Loaders;
 import com.linkedin.pinot.segments.v1.creator.SegmentTestUtils;
 import com.yammer.metrics.core.MetricsRegistry;
-import java.io.File;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.TimeUnit;
-import org.apache.commons.io.FileUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.testng.Assert;
-import org.testng.annotations.Test;
 
 
 public class RealtimeFileBasedReaderTest {
@@ -80,12 +80,11 @@ public class RealtimeFileBasedReaderTest {
 
     StreamProviderConfig config = new FileBasedStreamProviderConfig(FileFormat.AVRO, filePath, schema);
     StreamProvider provider = new FileBasedStreamProviderImpl();
-    final String tableName = RealtimeFileBasedReaderTest.class.getSimpleName() + ".noTable";
+    final String tableName = RealtimeFileBasedReaderTest.class.getSimpleName()+".noTable";
     provider.init(config, tableName, new ServerMetrics(new MetricsRegistry()));
 
-    realtimeSegment =
-        RealtimeSegmentImplTest.createRealtimeSegmentImpl(schema, 100000, tableName, segmentName, AVRO_DATA,
-            new ServerMetrics(new MetricsRegistry()));
+    realtimeSegment = RealtimeSegmentImplTest.createRealtimeSegmentImpl(schema, 100000, tableName, segmentName, AVRO_DATA, new
+        ServerMetrics(new MetricsRegistry()));
     GenericRow row = provider.next(new GenericRow());
     while (row != null) {
       realtimeSegment.index(row);
@@ -141,14 +140,14 @@ public class RealtimeFileBasedReaderTest {
         BlockSingleValIterator realtimeValIterator =
             (BlockSingleValIterator) realtimeBlock.getBlockValueSet().iterator();
 
-        Assert.assertEquals(offlineSegment.getSegmentMetadata().getTotalDocs(), realtimeSegment.getNumDocsIndexed());
+        Assert.assertEquals(offlineSegment.getSegmentMetadata().getTotalDocs(), realtimeSegment.getAggregateDocumentCount());
 
         while (realtimeValIterator.hasNext()) {
           int offlineDicId = offlineValIterator.nextIntVal();
           int realtimeDicId = realtimeValIterator.nextIntVal();
           try {
-            Assert.assertEquals(offlineMetadata.getDictionary().get(offlineDicId),
-                realtimeMetadata.getDictionary().get(realtimeDicId));
+            Assert.assertEquals(offlineMetadata.getDictionary().get(offlineDicId), realtimeMetadata.getDictionary()
+                .get(realtimeDicId));
           } catch (AssertionError e) {
             LOGGER.info("column : {}", spec.getName());
             LOGGER.info("realtimeDicId : {}, rawValue : {}", realtimeDicId,
@@ -157,9 +156,11 @@ public class RealtimeFileBasedReaderTest {
                 offlineMetadata.getDictionary().get(offlineDicId));
             throw e;
           }
+
         }
         Assert.assertEquals(offlineValIterator.hasNext(), realtimeValIterator.hasNext());
       }
+
     }
   }
 
@@ -180,7 +181,7 @@ public class RealtimeFileBasedReaderTest {
         BlockSingleValIterator realtimeValIterator =
             (BlockSingleValIterator) realtimeBlock.getBlockValueSet().iterator();
 
-        Assert.assertEquals(offlineSegment.getSegmentMetadata().getTotalDocs(), realtimeSegment.getNumDocsIndexed());
+        Assert.assertEquals(offlineSegment.getSegmentMetadata().getTotalDocs(), realtimeSegment.getAggregateDocumentCount());
 
         while (realtimeValIterator.hasNext()) {
           int offlineDicId = offlineValIterator.nextIntVal();
@@ -215,7 +216,7 @@ public class RealtimeFileBasedReaderTest {
         BlockSingleValIterator realtimeValIterator =
             (BlockSingleValIterator) realtimeBlock.getBlockValueSet().iterator();
 
-        Assert.assertEquals(offlineSegment.getSegmentMetadata().getTotalDocs(), realtimeSegment.getNumDocsIndexed());
+        Assert.assertEquals(offlineSegment.getSegmentMetadata().getTotalDocs(), realtimeSegment.getAggregateDocumentCount());
 
         while (realtimeValIterator.hasNext()) {
           int offlineDicId = offlineValIterator.nextIntVal();
@@ -243,7 +244,7 @@ public class RealtimeFileBasedReaderTest {
 
         BlockMultiValIterator offlineValIterator = (BlockMultiValIterator) offlineBlock.getBlockValueSet().iterator();
         BlockMultiValIterator realtimeValIterator = (BlockMultiValIterator) realtimeBlock.getBlockValueSet().iterator();
-        Assert.assertEquals(offlineSegment.getSegmentMetadata().getTotalDocs(), realtimeSegment.getNumDocsIndexed());
+        Assert.assertEquals(offlineSegment.getSegmentMetadata().getTotalDocs(), realtimeSegment.getAggregateDocumentCount());
 
         while (realtimeValIterator.hasNext()) {
 
@@ -255,9 +256,10 @@ public class RealtimeFileBasedReaderTest {
           Assert.assertEquals(Olen, Rlen);
 
           for (int i = 0; i < Olen; i++) {
-            Assert.assertEquals(offlineMetadata.getDictionary().get(offlineIds[i]),
-                realtimeMetadata.getDictionary().get(realtimeIds[i]));
+            Assert.assertEquals(offlineMetadata.getDictionary().get(offlineIds[i]), realtimeMetadata.getDictionary()
+                .get(realtimeIds[i]));
           }
+
         }
       }
     }

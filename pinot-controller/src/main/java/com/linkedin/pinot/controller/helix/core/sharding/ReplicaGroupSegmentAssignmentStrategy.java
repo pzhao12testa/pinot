@@ -42,17 +42,22 @@ import org.slf4j.LoggerFactory;
  *
  */
 public class ReplicaGroupSegmentAssignmentStrategy implements SegmentAssignmentStrategy {
+
   private static final Logger LOGGER = LoggerFactory.getLogger(ReplicaGroupSegmentAssignmentStrategy.class);
-  private static final Random RANDOM = new Random();
+  private static final Random random = new Random(System.currentTimeMillis());
 
   @Override
   public List<String> getAssignedInstances(HelixAdmin helixAdmin, ZkHelixPropertyStore<ZNRecord> propertyStore,
       String helixClusterName, SegmentMetadata segmentMetadata, int numReplicas, String tenantName) {
-    String offlineTableName = TableNameBuilder.OFFLINE.tableNameWithType(segmentMetadata.getTableName());
+
+    // Parse information from the input metadata.
+    SegmentMetadataImpl metadata = (SegmentMetadataImpl) segmentMetadata;
+    String tableName = segmentMetadata.getTableName();
+    String offlineTableName = TableNameBuilder.OFFLINE.tableNameWithType(tableName);
 
     // Fetch the partition mapping table from the property store.
     PartitionToReplicaGroupMappingZKMetadata partitionToReplicaGroupMapping =
-        ZKMetadataProvider.getPartitionToReplicaGroupMappingZKMedata(propertyStore, offlineTableName);
+        ZKMetadataProvider.getPartitionToReplicaGroupMappingZKMedata(propertyStore, tableName);
 
     // Fetch the segment assignment related configurations.
     TableConfig tableConfig = ZKMetadataProvider.getTableConfig(propertyStore, offlineTableName);
@@ -65,11 +70,10 @@ public class ReplicaGroupSegmentAssignmentStrategy implements SegmentAssignmentS
     int partitionNumber = 0;
     if (partitionColumn != null) {
       // TODO: Need to address when we have multiple partition numbers.
-      partitionNumber =
-          ((SegmentMetadataImpl) segmentMetadata).getColumnMetadataFor(replicaGroupStrategyConfig.getPartitionColumn())
-              .getPartitionRanges()
-              .get(0)
-              .getMaximumInteger();
+      partitionNumber = metadata.getColumnMetadataFor(replicaGroupStrategyConfig.getPartitionColumn())
+          .getPartitionRanges()
+          .get(0)
+          .getMaximumInteger();
     }
 
     // Perform the segment assignment.
@@ -84,11 +88,11 @@ public class ReplicaGroupSegmentAssignmentStrategy implements SegmentAssignmentS
       if (mirrorAssignmentAcrossReplicaGroups) {
         // Randomly pick the index and use the same index for all replica groups.
         if (groupId == 0) {
-          index = RANDOM.nextInt(numInstances);
+          index = random.nextInt(numInstances);
         }
       } else {
         // Randomly pick the index for all replica groups.
-        index = RANDOM.nextInt(numInstances);
+        index = random.nextInt(numInstances);
       }
       selectedInstanceList.add(instancesInReplicaGroup.get(index));
     }
